@@ -1,1 +1,11 @@
-# sensor-fusion-for-slam
+# Sensor-Fusion-for-SLAM
+
+本工程为**深蓝学院：多传感器融合定位第四期课程**的笔记及作业内容。
+
+工程包括
+
++ code：存放每节课程代码
++ doc：存放每节课上传的作业说明
++ project：为大作业预留的地方
++ notes：自己整理的课程笔记
+

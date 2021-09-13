@@ -1,0 +1,12 @@
+{
+    "files.associations": {
+        "*.tcc": "cpp",
+        "chrono": "cpp",
+        "polynomials": "cpp",
+        "*.txx": "cpp"
+    },
+    "python.autoComplete.extraPaths": [
+        "/home/chen/ros_active_SLAM/devel/lib/python2.7/dist-packages",
+        "/opt/ros/kinetic/lib/python2.7/dist-packages"
+    ]
+}

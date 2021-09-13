@@ -1,0 +1,70 @@
+--------------------------------------------------------------------------------
+name:	laser_odom
+infos:	3943 poses, 3750.745m path length
+--------------------------------------------------------------------------------
+name:	ground_truth
+infos:	3943 poses, 3725.114m path length
+--------------------------------------------------------------------------------
+Loaded 3943 poses from: ground_truth.txt
+Loaded 3943 poses from: laser_odom.txt
+--------------------------------------------------------------------------------
+Aligning using Umeyama's method...
+Rotation of alignment:
+[[ 9.96458473e-01  8.32901939e-02 -1.15435776e-02]
+ [-8.33046078e-02  9.96523831e-01 -7.72655409e-04]
+ [ 1.14390955e-02  1.73155223e-03  9.99933072e-01]]
+Translation of alignment:
+[ 3.32124644 15.81268317  7.1539029 ]
+Scale correction: 1.0
+--------------------------------------------------------------------------------
+Compared 3943 absolute pose pairs.
+Calculating APE for full transformation pose relation...
+--------------------------------------------------------------------------------
+APE w.r.t. full transformation (unit-less)
+(with SE(3) Umeyama alignment)
+
+       max	21.974868
+      mean	7.503364
+    median	5.801272
+       min	1.423701
+      rmse	8.903688
+       sse	312583.961866
+       std	4.793245
+
+--------------------------------------------------------------------------------
+Plotting results...
+--------------------------------------------------------------------------------
+Saving results to results/ape.zip...
+--------------------------------------------------------------------------------
+Loaded 3943 poses from: ground_truth.txt
+Loaded 3943 poses from: laser_odom.txt
+--------------------------------------------------------------------------------
+Aligning using Umeyama's method...
+Rotation of alignment:
+[[ 9.96458473e-01  8.32901939e-02 -1.15435776e-02]
+ [-8.33046078e-02  9.96523831e-01 -7.72655409e-04]
+ [ 1.14390955e-02  1.73155223e-03  9.99933072e-01]]
+Translation of alignment:
+[ 3.32124644 15.81268317  7.1539029 ]
+Scale correction: 1.0
+--------------------------------------------------------------------------------
+Found 3942 pairs with delta 1 (frames) among 3943 poses using consecutive pairs.
+Compared 3942 relative pose pairs, delta = 1 (frames) with consecutive pairs.
+Calculating RPE for full transformation pose relation...
+--------------------------------------------------------------------------------
+RPE w.r.t. full transformation (unit-less)
+for delta = 1 (frames) using consecutive pairs
+(with SE(3) Umeyama alignment)
+
+       max	0.240592
+      mean	0.020520
+    median	0.015856
+       min	0.001631
+      rmse	0.029082
+       sse	3.333998
+       std	0.020608
+
+--------------------------------------------------------------------------------
+Plotting results...
+--------------------------------------------------------------------------------
+Saving results to results/rpe.zip...
