@@ -1,0 +1,27 @@
+{
+    "configurations": [
+        {
+            "browse": {
+                "databaseFilename": "",
+                "limitSymbolsToIncludedHeaders": true
+            },
+            "includePath": [
+                "/home/chen/ros_active_SLAM/devel/include/**",
+                "/opt/ros/kinetic/include/**",
+                "/home/chen/ros_active_SLAM/src/controller/include/**",
+                "/home/chen/ros_active_SLAM/src/hokuyo/driver_common/driver_base/include/**",
+                "/home/chen/ros_active_SLAM/src/hokuyo/laser_proc/include/**",
+                "/home/chen/ros_active_SLAM/src/rrt/rrt_exploration/include/**",
+                "/home/chen/ros_active_SLAM/src/hokuyo/driver_common/timestamp_tools/include/**",
+                "/home/chen/ros_active_SLAM/src/turtlebot/turtlebot3_simulations/turtlebot3_fake/include/**",
+                "/home/chen/ros_active_SLAM/src/turtlebot/turtlebot3_simulations/turtlebot3_gazebo/include/**",
+                "/home/chen/ros_active_SLAM/src/turtlebot/turtlebot3-kinetic-devel/turtlebot3_slam/include/**",
+                "/home/chen/ros_active_SLAM/src/hokuyo/urg_node/include/**",
+                "/usr/include/**",
+                "${workspaceFolder}/imu_integration/include"
+            ],
+            "name": "ROS"
+        }
+    ],
+    "version": 4
+}

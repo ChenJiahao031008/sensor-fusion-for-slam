@@ -1,0 +1,80 @@
+--------------------------------------------------------------------------------
+name:	res
+infos:	2211 poses, 52.217m path length, 22.110s duration
+--------------------------------------------------------------------------------
+name:	gt
+infos:	2262 poses, 53.307m path length, 22.610s duration
+--------------------------------------------------------------------------------
+Loaded 2262 stamps and poses from: gt.txt
+Loaded 2211 stamps and poses from: res.txt
+Synchronizing trajectories...
+Found 2211 of max. 2262 possible matching timestamps between...
+	gt.txt
+and:	res.txt
+..with max. time diff.: 0.01 (s) and time offset: 0.0 (s).
+--------------------------------------------------------------------------------
+Aligning using Umeyama's method...
+Rotation of alignment:
+[[ 9.99995102e-01 -3.12955016e-03  4.18828877e-05]
+ [ 3.12955956e-03  9.99995077e-01 -2.26095182e-04]
+ [-4.11751054e-05  2.26225150e-04  9.99999974e-01]]
+Translation of alignment:
+[-0.00043119 -0.00040359  0.00083653]
+Scale correction: 1.0
+--------------------------------------------------------------------------------
+Compared 2211 absolute pose pairs.
+Calculating APE for full transformation pose relation...
+--------------------------------------------------------------------------------
+APE w.r.t. full transformation (unit-less)
+(with SE(3) Umeyama alignment)
+
+       max	0.035987
+      mean	0.020475
+    median	0.022422
+       min	0.003152
+      rmse	0.022453
+       sse	1.114612
+       std	0.009213
+
+--------------------------------------------------------------------------------
+Plotting results...
+--------------------------------------------------------------------------------
+Saving results to results/ape.zip...
+--------------------------------------------------------------------------------
+Loaded 2262 stamps and poses from: gt.txt
+Loaded 2211 stamps and poses from: res.txt
+Synchronizing trajectories...
+Found 2211 of max. 2262 possible matching timestamps between...
+	gt.txt
+and:	res.txt
+..with max. time diff.: 0.01 (s) and time offset: 0.0 (s).
+--------------------------------------------------------------------------------
+Aligning using Umeyama's method...
+Rotation of alignment:
+[[ 9.99995102e-01 -3.12955016e-03  4.18828877e-05]
+ [ 3.12955956e-03  9.99995077e-01 -2.26095182e-04]
+ [-4.11751054e-05  2.26225150e-04  9.99999974e-01]]
+Translation of alignment:
+[-0.00043119 -0.00040359  0.00083653]
+Scale correction: 1.0
+--------------------------------------------------------------------------------
+Found 2210 pairs with delta 1 (frames) among 2211 poses using consecutive pairs.
+Compared 2210 relative pose pairs, delta = 1 (frames) with consecutive pairs.
+Calculating RPE for full transformation pose relation...
+--------------------------------------------------------------------------------
+RPE w.r.t. full transformation (unit-less)
+for delta = 1 (frames) using consecutive pairs
+(with SE(3) Umeyama alignment)
+
+       max	0.014839
+      mean	0.000686
+    median	0.000717
+       min	0.000000
+      rmse	0.000868
+       sse	0.001665
+       std	0.000531
+
+--------------------------------------------------------------------------------
+Plotting results...
+--------------------------------------------------------------------------------
+Saving results to results/rpe.zip...
