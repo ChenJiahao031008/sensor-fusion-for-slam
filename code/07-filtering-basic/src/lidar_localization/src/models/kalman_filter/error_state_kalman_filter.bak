@@ -5,6 +5,7 @@
  */
 #include <cstdlib>
 #include <limits>
+#include <ros/ros.h>
 
 #include <cmath>
 #include <fstream>
@@ -52,6 +53,10 @@ ErrorStateKalmanFilter::ErrorStateKalmanFilter(const YAML::Node &node) {
   COV.MEASUREMENT.POSE.ORI =
       node["covariance"]["measurement"]["pose"]["ori"].as<double>();
 
+  // e. correct bias
+  correct_bias_ = true;
+  std::cout<<"correct_bias "<<correct_bias_<<std::endl<<std::endl;
+
   // prompt:
   LOG(INFO) << std::endl
             << "Error-State Kalman Filter params:" << std::endl
@@ -79,10 +84,10 @@ ErrorStateKalmanFilter::ErrorStateKalmanFilter(const YAML::Node &node) {
   // a. earth constants:
   g_ = Eigen::Vector3d(0.0, 0.0, EARTH.GRAVITY_MAGNITUDE);
   // b. prior state & covariance:
-  ResetState(); // 清零
-  ResetCovariance(); // 置为方差对角阵
+  ResetState();
+  ResetCovariance();
 
-  // c. process noise: 噪声对角阵
+  // c. process noise:
   Q_.block<3, 3>(kIndexNoiseAccel, kIndexNoiseAccel) = COV.PROCESS.ACCEL * Eigen::Matrix3d::Identity();
   Q_.block<3, 3>(kIndexNoiseGyro, kIndexNoiseGyro) = COV.PROCESS.GYRO * Eigen::Matrix3d::Identity();
   Q_.block<3, 3>(kIndexNoiseBiasAccel, kIndexNoiseBiasAccel) = COV.PROCESS.BIAS_ACCEL * Eigen::Matrix3d::Identity();
@@ -92,23 +97,23 @@ ErrorStateKalmanFilter::ErrorStateKalmanFilter(const YAML::Node &node) {
   RPose_.block<3, 3>(0, 0) = COV.MEASUREMENT.POSE.POSI * Eigen::Matrix3d::Identity();
   RPose_.block<3, 3>(3, 3) = COV.MEASUREMENT.POSE.ORI * Eigen::Matrix3d::Identity();
 
-  // e. process equation: (剩余的部分在SetProcessEquation中被补齐)
+  // e. process equation:
   F_.block<3, 3>(kIndexErrorPos, kIndexErrorVel) = Eigen::Matrix3d::Identity();
   F_.block<3, 3>(kIndexErrorOri, kIndexErrorGyro) = -Eigen::Matrix3d::Identity();
 
   B_.block<3, 3>(kIndexErrorOri, kIndexNoiseGyro) = Eigen::Matrix3d::Identity();
-// #define USE_BIAS
-#ifdef USE_BIAS
-  B_.block<3, 3>(kIndexErrorAccel, kIndexNoiseBiasAccel) = Eigen::Matrix3d::Identity();
-  B_.block<3, 3>(kIndexErrorGyro, kIndexNoiseBiasGyro) = Eigen::Matrix3d::Identity();
-#endif
+  if(correct_bias_){
+    B_.block<3, 3>(kIndexErrorAccel, kIndexNoiseBiasAccel) = Eigen::Matrix3d::Identity();
+    B_.block<3, 3>(kIndexErrorGyro, kIndexNoiseBiasGyro) = Eigen::Matrix3d::Identity();
+  } else {
+    B_.block<3, 3>(kIndexErrorAccel, kIndexNoiseBiasAccel) = Eigen::Matrix3d::Zero();
+    B_.block<3, 3>(kIndexErrorGyro, kIndexNoiseBiasGyro) = Eigen::Matrix3d::Zero();
+  }
+
+
   // f. measurement equation:
-  // GPose_  = | I 0 0 0 0 |
-  //           | 0 0 I 0 0 |
   GPose_.block<3, 3>(0, kIndexErrorPos) = Eigen::Matrix3d::Identity();
   GPose_.block<3, 3>(3, kIndexErrorOri) = Eigen::Matrix3d::Identity();
-  // CPose_ = | I 0 |
-  //        = | 0 I |
   CPose_.block<3, 3>(0, 0) = Eigen::Matrix3d::Identity();
   CPose_.block<3, 3>(3, 3) = Eigen::Matrix3d::Identity();
 
@@ -179,7 +184,6 @@ bool ErrorStateKalmanFilter::Update(const IMUData &imu_data) {
     // update IMU odometry:
     Eigen::Vector3d linear_acc_mid;
     Eigen::Vector3d angular_vel_mid;
-
     imu_data_buff_.push_back(imu_data);
     UpdateOdomEstimation(linear_acc_mid, angular_vel_mid);
     imu_data_buff_.pop_front();
@@ -260,18 +264,11 @@ void ErrorStateKalmanFilter::GetOdometry(Eigen::Matrix4f &pose,
   // b. velocity:
   vel_double = vel_double - X_.block<3, 1>(kIndexErrorVel, 0);
   // c. orientation:
-  // Case 1
-  // Eigen::Matrix3d delta_R = Eigen::Matrix3d::Identity() - Sophus::SO3d::hat(X_.block<3, 1>(kIndexErrorOri, 0)).matrix();
-  // Eigen::Quaterniond dq = Eigen::Quaterniond(delta_R);
-  // dq = dq.normalized();
-  // pose_double.block<3, 3>(0, 0) = pose_double.block<3, 3>(0, 0) * dq.toRotationMatrix();
-  // Case 2:
   Eigen::Matrix3d C_nn =
       Sophus::SO3d::exp(X_.block<3, 1>(kIndexErrorOri, 0)).matrix();
-  pose_double.block<3, 3>(0, 0) = pose_double.block<3, 3>(0, 0) * C_nn.transpose();
+  pose_double.block<3, 3>(0, 0) = C_nn * pose_double.block<3, 3>(0, 0);
 
   // finally:
-  // 导航坐标系转换为机体坐标系
   pose_double = init_pose_.inverse() * pose_double;
   vel_double = init_pose_.block<3, 3>(0, 0).transpose() * vel_double;
 
@@ -477,24 +474,41 @@ void ErrorStateKalmanFilter::UpdateOdomEstimation(
   // TODO: this is one possible solution to previous chapter, IMU Navigation,
   // assignment
   //
-  int index_curr = 1;
-  int index_prev = 0;
-  Eigen::Vector3d angular_delta;
-  GetAngularDelta(index_curr, index_prev, angular_delta, angular_vel_mid);
-  Eigen::Matrix3d R_curr, R_prev;
+  // get deltas:
+  Eigen::Vector3d angluar_delta, angluar_vel_mid;
+  GetAngularDelta(1, 0, angluar_delta, angluar_vel_mid);
+
   // update orientation:
-  UpdateOrientation(angular_delta, R_curr, R_prev);
+  Eigen::Matrix3d R_curr, R_prev;
+  UpdateOrientation(angluar_delta, R_curr, R_prev);
 
   // get velocity delta:
-  double delta_t = 0.0;
-  Eigen::Vector3d vel_delta;
-  GetVelocityDelta(index_curr, index_prev, R_curr, R_prev, delta_t, vel_delta, linear_acc_mid);
+  double T;
+  Eigen::Vector3d velocity_delta;
+  GetVelocityDelta(1, 0, R_curr, R_prev, T, velocity_delta, linear_acc_mid);
 
   // save mid-value unbiased linear acc for error-state update:
 
   // update position:
-  UpdatePosition(delta_t, vel_delta);
+  UpdatePosition(T, velocity_delta);
 
+  // int index_curr = 1;
+  // int index_prev = 0;
+  // Eigen::Vector3d angular_delta;
+  // GetAngularDelta(index_curr, index_prev, angular_delta, angular_vel_mid);
+  // Eigen::Matrix3d R_curr, R_prev;
+  // // update orientation:
+  // UpdateOrientation(angular_delta, R_curr, R_prev);
+
+  // // get velocity delta:
+  // double delta_t = 0.0;
+  // Eigen::Vector3d vel_delta;
+  // GetVelocityDelta(index_curr, index_prev, R_curr, R_prev, delta_t, vel_delta, linear_acc_mid);
+
+  // // save mid-value unbiased linear acc for error-state update:
+
+  // // update position:
+  // UpdatePosition(delta_t, vel_delta);
 }
 
 /**
@@ -505,24 +519,32 @@ void ErrorStateKalmanFilter::UpdateOdomEstimation(
  */
 void ErrorStateKalmanFilter::SetProcessEquation(const Eigen::Matrix3d &C_nb,
                                                 const Eigen::Vector3d &f_n,
-                                                const Eigen::Vector3d &w_b)
-{
+                                                const Eigen::Vector3d &w_b) {
   // TODO: set process / system equation:
   // a. set process equation for delta vel:
-  Eigen::Matrix3d a_x, w_x;
-  a_x <<       0, -f_n(2),   f_n(1),
-          f_n(2),       0,  -f_n(0),
-         -f_n(1),  f_n(0),        0;
-  w_x <<       0, -w_b(2),   w_b(1),
-          w_b(2),       0,  -w_b(0),
-         -w_b(1),  w_b(0),        0;
-  F_.block<3, 3>(kIndexErrorVel, kIndexErrorOri)   = -C_nb * a_x;
-  F_.block<3, 3>(kIndexErrorVel, kIndexErrorAccel) = -C_nb;
-  B_.block<3, 3>(kIndexErrorVel, kIndexNoiseAccel) =  C_nb;
+  F_.block<3,3>(kIndexErrorVel, kIndexErrorOri) = -C_nb * Sophus::SO3d::hat(f_n).matrix();
+  F_.block<3,3>(kIndexErrorVel, kIndexErrorAccel) = -C_nb;
 
   // b. set process equation for delta ori:
-  F_.block<3, 3>(kIndexErrorOri, kIndexErrorOri)   = -w_x;
+  F_.block<3,3>(kIndexErrorOri, kIndexErrorOri) = -Sophus::SO3d::hat(w_b).matrix();
 
+  B_.block<3,3>(kIndexErrorVel, kIndexNoiseAccel) = C_nb;
+
+  // // TODO: set process / system equation:
+  // // a. set process equation for delta vel:
+  // Eigen::Matrix3d a_x, w_x;
+  // a_x <<       0, -f_n(2),   f_n(1),
+  //         f_n(2),       0,  -f_n(0),
+  //        -f_n(1),  f_n(0),        0;
+  // w_x <<       0, -w_b(2),   w_b(1),
+  //         w_b(2),       0,  -w_b(0),
+  //        -w_b(1),  w_b(0),        0;
+  // F_.block<3, 3>(kIndexErrorVel, kIndexErrorOri)   = -C_nb * a_x;
+  // F_.block<3, 3>(kIndexErrorVel, kIndexErrorAccel) = -C_nb;
+  // B_.block<3, 3>(kIndexErrorVel, kIndexNoiseAccel) =  C_nb;
+
+  // // b. set process equation for delta ori:
+  // F_.block<3, 3>(kIndexErrorOri, kIndexErrorOri)   = -w_x;
 }
 
 /**
@@ -536,8 +558,11 @@ void ErrorStateKalmanFilter::UpdateProcessEquation(
     const Eigen::Vector3d &angular_vel_mid) {
   // set linearization point:
   Eigen::Matrix3d C_nb = pose_.block<3, 3>(0, 0);
-  Eigen::Vector3d f_n  = linear_acc_mid + g_;
-  Eigen::Vector3d w_b  = angular_vel_mid;
+  // 这里 a_mid = (a1+a2)/2 - g
+  // a1 = R(a_m-ba)
+  // 速度误差微分方程中是没有g的 多减的g这里要补上
+  Eigen::Vector3d f_n = linear_acc_mid + g_;
+  Eigen::Vector3d w_b = angular_vel_mid;
 
   // set process equation:
   SetProcessEquation(C_nb, f_n, w_b);
@@ -553,28 +578,42 @@ void ErrorStateKalmanFilter::UpdateErrorEstimation(
     const Eigen::Vector3d &angular_vel_mid) {
   static MatrixF F_1st;
   static MatrixF F_2nd;
-  // static MatrixB B_1st;
   // TODO: update process equation:
   UpdateProcessEquation(linear_acc_mid, angular_vel_mid);
 
   // TODO: get discretized process equations:
-  Eigen::Matrix<double, kDimState, kDimState> I_15 = Eigen::Matrix<double, kDimState, kDimState>::Identity();
-
-  // 一阶近似
-  F_1st = T * F_;
-  // 二阶近似
-  F_2nd = 0.5 * T * F_ * F_1st;
-  B_.block<3, 3>(kIndexErrorVel, kIndexNoiseAccel) = B_.block<3, 3>(kIndexErrorVel, kIndexNoiseAccel) * T;
-  B_.block<3, 3>(kIndexErrorOri, kIndexNoiseGyro) = B_.block<3, 3>(kIndexErrorOri, kIndexNoiseGyro) * T;
-  B_.block<3, 3>(kIndexErrorAccel, kIndexNoiseBiasAccel) = B_.block<3, 3>(kIndexErrorAccel, kIndexNoiseBiasAccel) * sqrt(T);
-  B_.block<3, 3>(kIndexErrorGyro, kIndexNoiseBiasGyro) = B_.block<3, 3>(kIndexErrorGyro, kIndexNoiseBiasGyro) * sqrt(T);
+  MatrixF F = MatrixF::Identity() + F_*T;
+  // std::cout<<"predict F:"<<std::endl<<F.matrix()<<std::endl;
+  MatrixB B = B_*T;
+  if(correct_bias_){
+   B.block<6,6>(kIndexErrorAccel, kIndexNoiseBiasAccel) = Eigen::Matrix<double, 6, 6>::Identity() * sqrt(T);
+  }
+  // std::cout<<"predict B:"<<std::endl<<B.matrix()<<std::endl;
 
   // TODO: perform Kalman prediction
-  // 泰勒二阶展开
-  // MatrixF F = MatrixF::Identity() + F_1st + F_2nd;
-  MatrixF F = MatrixF::Identity() + F_1st;
-  X_ = F * X_;
-  P_ = F * P_ * F.transpose() + B_ * Q_ * B_.transpose();
+  P_ = F*P_*F.transpose()+B*Q_*B.transpose();
+  // std::cout<<"predict P:"<<std::endl<<P_.matrix()<<std::endl;
+  // std::cout<<"BQB^T: "<<std::endl<<B*Q_*B.transpose()<<std::endl;
+
+  // static MatrixF F_1st;
+  // static MatrixF F_2nd;
+  // static MatrixB B_1st;
+  // // TODO: update process equation:
+  // UpdateProcessEquation(linear_acc_mid, angular_vel_mid);
+
+  // // TODO: get discretized process equations:
+  // Eigen::Matrix<double, kDimState, kDimState> I_15 = Eigen::Matrix<double, kDimState, kDimState>::Identity();
+
+  // F_1st = I_15 + T * F_;
+  // B_1st = B_;
+  // B_1st.block<3, 3>(kIndexErrorVel, kIndexNoiseAccel) *= T;
+  // B_1st.block<3, 3>(kIndexErrorOri, kIndexNoiseGyro ) *= T;
+  // B_1st.block<3, 3>(kIndexErrorAccel, kIndexNoiseBiasAccel) *= sqrt(T);
+  // B_1st.block<3, 3>(kIndexErrorGyro , kIndexNoiseBiasGyro ) *= sqrt(T);
+
+  // // TODO: perform Kalman prediction
+  // X_ = F_1st * X_;
+  // P_ = F_1st * P_ * F_1st.transpose() + B_1st * Q_ * B_1st.transpose();
 }
 
 /**
@@ -588,20 +627,38 @@ void ErrorStateKalmanFilter::CorrectErrorEstimationPose(
   //
   // TODO: set measurement:
   //
-  YPose_.block<3, 1>(0, 0) = pose_.block<3, 1>(0, 3) - T_nb.block<3, 1>(0, 3);
-  Eigen::Matrix3d measPose = T_nb.block<3, 3>(0, 0);
-  Eigen::Matrix3d predPose = pose_.block<3, 3>(0, 0);
-  Eigen::Matrix3d deltaPose = measPose.transpose() * predPose;
-  Eigen::Matrix3d R_tmp = deltaPose - Eigen::Matrix3d::Identity();
-  Eigen::Vector3d deltaTheta(R_tmp(2, 1), R_tmp(0, 2), R_tmp(1, 0));
-  YPose_.block<3, 1>(3, 0) = deltaTheta;
+  Eigen::Vector3d delta_p = pose_.block<3,1>(0,3) - T_nb.block<3,1>(0,3);
+  Eigen::Matrix3d delta_R = T_nb.block<3,3>(0,0).transpose() * pose_.block<3,3>(0,0);
+  Eigen::Vector3d delta_theta = Sophus::SO3d::vee(delta_R-Eigen::Matrix3d::Identity());
 
   // TODO: set measurement equation:
+  YPose_.block<3,1>(0,0) = delta_p;
+  YPose_.block<3,1>(3,0) = delta_theta;
   Y = YPose_;
   G = GPose_;
 
   // TODO: set Kalman gain:
-  K = P_ * GPose_.transpose() * (GPose_ * P_ * (GPose_.transpose()) + CPose_ * RPose_ * CPose_.transpose()).inverse();
+  // 这里没必要C*R*C^T 因为C是一个单位阵
+  K = P_*G.transpose()*(G*P_*G.transpose() + RPose_).inverse();
+  // std::cout<<"K:"<<std::endl<<K.matrix()<<std::endl;
+
+  // //
+  // // TODO: set measurement:
+  // //
+  // YPose_.block<3, 1>(0, 0) = pose_.block<3, 1>(0, 3) - T_nb.block<3, 1>(0, 3);
+  // Eigen::Matrix3d measPose = T_nb.block<3, 3>(0, 0);
+  // Eigen::Matrix3d predPose = pose_.block<3, 3>(0, 0);
+  // Eigen::Matrix3d deltaPose = measPose.transpose() * predPose;
+  // Eigen::Matrix3d R_tmp = deltaPose - Eigen::Matrix3d::Identity();
+  // Eigen::Vector3d deltaTheta(R_tmp(2, 1), R_tmp(0, 2), R_tmp(1, 0));
+  // YPose_.block<3, 1>(3, 0) = deltaTheta;
+
+  // // TODO: set measurement equation:
+  // Y = YPose_;
+  // G = GPose_;
+
+  // // TODO: set Kalman gain:
+  // K = P_ * GPose_.transpose() * (GPose_ * P_ * (GPose_.transpose()) + CPose_ * RPose_ * CPose_.transpose()).inverse();
 }
 
 /**
@@ -626,8 +683,9 @@ void ErrorStateKalmanFilter::CorrectErrorEstimation(
   }
 
   // TODO: perform Kalman correct:
-  P_ = (MatrixP::Identity() - K * G) * P_;
-  X_ = X_ + K * (Y - G * X_);
+  P_ = (MatrixP::Identity() - K*G)*P_;
+  // std::cout<<"P:"<<std::endl<<P_.matrix()<<std::endl;
+  X_ = X_ + K*(Y-G*X_);
 }
 
 /**
@@ -640,30 +698,39 @@ void ErrorStateKalmanFilter::EliminateError(void) {
   // TODO: correct state estimation using the state of ESKF
   //
   // a. position:
-  pose_.block<3, 1>(0, 3) = pose_.block<3, 1>(0, 3) - X_.block<3, 1>(0, 0);
+  // do it!
+  pose_.block<3,1>(0,3) -= X_.block<3,1>(kIndexErrorPos,0);
   // b. velocity:
-  vel_ = vel_ - X_.block<3, 1>(3, 0);
-
+  // do it!
+  vel_ -= X_.block<3,1>(kIndexErrorVel,0);
   // c. orientation:
-  // 原始方法
-  Eigen::Matrix3d delta_R = Eigen::Matrix3d::Identity() - Sophus::SO3d::hat(X_.block<3, 1>(kIndexErrorOri, 0)).matrix();
+  // do it!
+  Eigen::Matrix3d delta_R = Eigen::Matrix3d::Identity() - Sophus::SO3d::hat(X_.block<3,1>(kIndexErrorOri,0)).matrix();
   Eigen::Quaterniond dq = Eigen::Quaterniond(delta_R);
   dq = dq.normalized();
   pose_.block<3, 3>(0, 0) = pose_.block<3, 3>(0, 0) * dq.toRotationMatrix();
-  // 和同学讨论后认为由于delta为小量，因此下面这种方法也行
+  // std::cout<<"curr R: "<<std::endl<< pose_.block<3,3>(0,0)<<std::endl;
+
+  //   // c. orientation:
   // Eigen::Matrix3d C_nn =
   //     Sophus::SO3d::exp(X_.block<3, 1>(kIndexErrorOri, 0)).matrix();
+  // // Eigen::Matrix3d C_nn =
+  // //     Sophus::SO3d::hat(X_.block<3, 1>(kIndexErrorOri, 0)).matrix();
   // pose_.block<3, 3>(0, 0) = pose_.block<3, 3>(0, 0) * C_nn.transpose();
 
-  // d. gyro bias:
   if (IsCovStable(kIndexErrorGyro)) {
+    // gyro_bias_ += X_.block<3, 1>(kIndexErrorGyro, 0);
     gyro_bias_ -= X_.block<3, 1>(kIndexErrorGyro, 0);
   }
 
   // e. accel bias:
   if (IsCovStable(kIndexErrorAccel)) {
+    // accl_bias_ += X_.block<3, 1>(kIndexErrorAccel, 0);
     accl_bias_ -= X_.block<3, 1>(kIndexErrorAccel, 0);
   }
+
+  // std::cout<<"bg: "<< X_.block<3, 1>(kIndexErrorGyro, 0).transpose()<<
+  // std::endl<<"ba: "<< X_.block<3, 1>(kIndexErrorAccel, 0).transpose() <<std::endl;
 }
 
 /**
@@ -711,6 +778,8 @@ void ErrorStateKalmanFilter::ResetCovariance(void) {
       COV.PRIOR.EPSILON * Eigen::Matrix3d::Identity();
   P_.block<3, 3>(kIndexErrorAccel, kIndexErrorAccel) =
       COV.PRIOR.DELTA * Eigen::Matrix3d::Identity();
+
+  std::cout<<"init P:"<<std::endl<<P_.matrix()<<std::endl;
 }
 
 /**

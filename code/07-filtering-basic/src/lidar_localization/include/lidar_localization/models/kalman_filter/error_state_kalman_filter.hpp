@@ -293,6 +293,8 @@ private:
 
   // measurement:
   VectorYPose YPose_;
+
+  bool correct_bias_;
 };
 
 } // namespace lidar_localization
