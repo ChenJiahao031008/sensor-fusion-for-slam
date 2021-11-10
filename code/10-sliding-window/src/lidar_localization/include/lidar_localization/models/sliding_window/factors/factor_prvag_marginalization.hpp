@@ -203,6 +203,7 @@ public:
     if ( jacobians ) {
       if ( jacobians[0] ) {
         Eigen::Map<Eigen::Matrix<double, 15, 15, Eigen::RowMajor> > jacobian_(jacobians[0]);
+        jacobian_.setZero();
         jacobian_ = J_;
       }
     }

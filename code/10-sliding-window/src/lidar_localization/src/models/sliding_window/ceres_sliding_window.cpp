@@ -328,6 +328,7 @@ bool CeresSlidingWindow::Optimize() {
                     factor_map_matching_pose,
                     NULL,
                     key_frame.prvag);
+
             }
         }
 
@@ -349,6 +350,12 @@ bool CeresSlidingWindow::Optimize() {
                     factor_relative_pose,
                     NULL,
                     key_frame_i.prvag, key_frame_j.prvag);
+
+                // double **para = new double *[2];
+                // para[0] = key_frame_i.prvag;
+                // para[1] = key_frame_j.prvag;
+                // factor_relative_pose->CheckJacobian(para);
+
             }
         }
 
@@ -373,6 +380,11 @@ bool CeresSlidingWindow::Optimize() {
                     factor_imu_pre_integration,
                     NULL,
                     key_frame_i.prvag, key_frame_j.prvag);
+
+                // double **para = new double *[2];
+                // para[0] = key_frame_i.prvag;
+                // para[1] = key_frame_j.prvag;
+                // factor_imu_pre_integration->CheckJacobian(para);
             }
         }
 
