@@ -1,0 +1,8 @@
+<launch>
+    <node pkg="rviz"  type="rviz"  name="rviz"  args="-d $(find lidar_localization)/rviz/matching.rviz"></node>
+    <node pkg="lidar_localization"  type="data_pretreat_node"  name="data_pretreat_node"  output="screen"></node>
+    <node pkg="lidar_localization"  type="matching_node"  name="matching_node"  output="screen"></node>
+
+    <node pkg="tf" type="static_transform_publisher" name="velo2imu"
+        args="0 0 0 2.5 0 0 imu_link velo_link 500"/>
+</launch>
